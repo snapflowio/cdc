@@ -17,12 +17,7 @@ func main() {
 	ctx := context.Background()
 
 	cfg := config.NewConfig(
-		config.WithHost("127.0.0.1"),
-		config.WithPort(5432),
-		config.WithUsername("user"),
-		config.WithPassword("password"),
-		config.WithDatabase("postgres"),
-
+		config.WithDSN("postgres://user:password@127.0.0.1:5432/postgres"),
 		config.WithDebugMode(false),
 		config.WithLogLevel(logrus.InfoLevel),
 

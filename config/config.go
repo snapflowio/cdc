@@ -46,33 +46,29 @@ func NewConfig(opts ...Option) *Config {
 	return c
 }
 
-func WithHost(host string) Option {
+func WithDSN(dsn string) Option {
 	return func(c *Config) {
-		c.Host = host
-	}
-}
+		parsedURL, err := url.Parse(dsn)
+		if err != nil {
+			return
+		}
 
-func WithPort(port int) Option {
-	return func(c *Config) {
-		c.Port = port
-	}
-}
+		c.Host = parsedURL.Hostname()
+		if parsedURL.Port() != "" {
+			port := 5432
+			if _, err := fmt.Sscanf(parsedURL.Port(), "%d", &port); err == nil {
+				c.Port = port
+			}
+		}
 
-func WithUsername(username string) Option {
-	return func(c *Config) {
-		c.Username = username
-	}
-}
+		if parsedURL.User != nil {
+			c.Username = parsedURL.User.Username()
+			if password, ok := parsedURL.User.Password(); ok {
+				c.Password = password
+			}
+		}
 
-func WithPassword(password string) Option {
-	return func(c *Config) {
-		c.Password = password
-	}
-}
-
-func WithDatabase(database string) Option {
-	return func(c *Config) {
-		c.Database = database
+		c.Database = strings.TrimPrefix(parsedURL.Path, "/")
 	}
 }
 
