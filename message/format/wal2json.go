@@ -1,6 +1,7 @@
 package format
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 )
@@ -52,10 +53,8 @@ func buildWAL2JSON(action string, rel *Relation, decoded map[string]any) (*WAL2J
 	for _, colMeta := range rel.Columns {
 		value := decoded[colMeta.Name]
 
-		// Convert []byte to string for better JSON compatibility
-		if bytesVal, ok := value.([]byte); ok {
-			value = string(bytesVal)
-		}
+		// Convert values based on PostgreSQL type
+		value = formatValue(value, colMeta.DataType)
 
 		columns = append(columns, WAL2JSONColumn{
 			Name:    colMeta.Name,
@@ -77,6 +76,37 @@ func buildWAL2JSON(action string, rel *Relation, decoded map[string]any) (*WAL2J
 		Columns: columns,
 		PK:      pk,
 	}, nil
+}
+
+// formatValue converts a value based on its PostgreSQL type OID
+func formatValue(value any, typeOID uint32) any {
+	if value == nil {
+		return nil
+	}
+
+	// Handle []byte values based on type
+	if bytesVal, ok := value.([]byte); ok {
+		switch typeOID {
+		case 2950: // UUID
+			if len(bytesVal) == 16 {
+				// Format as UUID string: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+				return fmt.Sprintf("%x-%x-%x-%x-%x",
+					bytesVal[0:4],
+					bytesVal[4:6],
+					bytesVal[6:8],
+					bytesVal[8:10],
+					bytesVal[10:16])
+			}
+		case 17: // bytea
+			// Format as hex string
+			return "\\x" + hex.EncodeToString(bytesVal)
+		default:
+			// For other types, convert to string (text, varchar, etc.)
+			return string(bytesVal)
+		}
+	}
+
+	return value
 }
 
 // getTypeName returns a PostgreSQL type name for common OIDs
