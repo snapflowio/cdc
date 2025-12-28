@@ -11,7 +11,7 @@ import (
 type Delete struct {
 	MessageTime    time.Time
 	OldTupleData   *tuple.Data
-	OldDecoded     map[string]any
+	WAL2JSON       *WAL2JSONMessage
 	TableNamespace string
 	TableName      string
 	OID            uint32
@@ -36,11 +36,16 @@ func NewDelete(data []byte, streamedTransaction bool, relation map[uint32]*Relat
 	msg.TableNamespace = rel.Namespace
 	msg.TableName = rel.Name
 
-	var err error
-
-	msg.OldDecoded, err = msg.OldTupleData.DecodeWithColumn(rel.Columns)
+	// Decode old tuple data
+	oldDecoded, err := msg.OldTupleData.DecodeWithColumn(rel.Columns)
 	if err != nil {
 		return nil, err
+	}
+
+	// Build wal2json structure
+	msg.WAL2JSON, err = buildWAL2JSON("D", rel, oldDecoded)
+	if err != nil {
+		return nil, fmt.Errorf("build wal2json: %w", err)
 	}
 
 	return msg, nil

@@ -17,9 +17,8 @@ const (
 type Update struct {
 	MessageTime    time.Time
 	NewTupleData   *tuple.Data
-	NewDecoded     map[string]any
 	OldTupleData   *tuple.Data
-	OldDecoded     map[string]any
+	WAL2JSON       *WAL2JSONMessage
 	TableNamespace string
 	TableName      string
 	OID            uint32
@@ -46,16 +45,16 @@ func NewUpdate(data []byte, streamedTransaction bool, relation map[uint32]*Relat
 
 	var err error
 
-	if msg.OldTupleData != nil {
-		msg.OldDecoded, err = msg.OldTupleData.DecodeWithColumn(rel.Columns)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	msg.NewDecoded, err = msg.NewTupleData.DecodeWithColumn(rel.Columns)
+	// Decode new tuple data (UPDATE always has new data)
+	newDecoded, err := msg.NewTupleData.DecodeWithColumn(rel.Columns)
 	if err != nil {
 		return nil, err
+	}
+
+	// Build wal2json structure with new data
+	msg.WAL2JSON, err = buildWAL2JSON("U", rel, newDecoded)
+	if err != nil {
+		return nil, fmt.Errorf("build wal2json: %w", err)
 	}
 
 	return msg, nil

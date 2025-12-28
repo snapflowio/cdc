@@ -15,7 +15,7 @@ const (
 type Insert struct {
 	MessageTime    time.Time
 	TupleData      *tuple.Data
-	Decoded        map[string]any
+	WAL2JSON       *WAL2JSONMessage
 	TableNamespace string
 	TableName      string
 	OID            uint32
@@ -39,12 +39,16 @@ func NewInsert(data []byte, streamedTransaction bool, relation map[uint32]*Relat
 	msg.TableNamespace = rel.Namespace
 	msg.TableName = rel.Name
 
-	msg.Decoded = make(map[string]any)
-
-	var err error
-	msg.Decoded, err = msg.TupleData.DecodeWithColumn(rel.Columns)
+	// Decode tuple data
+	decoded, err := msg.TupleData.DecodeWithColumn(rel.Columns)
 	if err != nil {
 		return nil, err
+	}
+
+	// Build wal2json structure
+	msg.WAL2JSON, err = buildWAL2JSON("I", rel, decoded)
+	if err != nil {
+		return nil, fmt.Errorf("build wal2json: %w", err)
 	}
 
 	return msg, nil

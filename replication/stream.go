@@ -13,9 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/snapflowio/cdc/config"
+	"github.com/snapflowio/cdc/internal/pg"
 	"github.com/snapflowio/cdc/internal/slice"
 	"github.com/snapflowio/cdc/logger"
-	"github.com/snapflowio/cdc/internal/pg"
 	"github.com/snapflowio/cdc/message"
 	"github.com/snapflowio/cdc/message/format"
 )
@@ -30,8 +30,9 @@ const (
 )
 
 type ListenerContext struct {
-	Message any
-	Ack     func() error
+	Message  any
+	Relation *format.Relation
+	Ack      func() error
 }
 
 type ListenerFunc func(ctx *ListenerContext)
@@ -244,8 +245,25 @@ func (s *stream) process(ctx context.Context) {
 			break
 		}
 
+		var relation *format.Relation
+		var oid uint32
+
+		switch m := msg.message.(type) {
+		case *format.Insert:
+			oid = m.OID
+		case *format.Update:
+			oid = m.OID
+		case *format.Delete:
+			oid = m.OID
+		}
+
+		if oid != 0 {
+			relation = s.relation[oid]
+		}
+
 		lCtx := &ListenerContext{
-			Message: msg.message,
+			Message:  msg.message,
+			Relation: relation,
 			Ack: func() error {
 				pos := pg.LSN(msg.walStart)
 				s.system.UpdateXLogPos(pos)
