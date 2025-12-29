@@ -78,25 +78,19 @@ func buildWAL2JSON(action string, rel *Relation, decoded map[string]any) (*WAL2J
 	}, nil
 }
 
-// formatValue converts a value based on its PostgreSQL type OID
 func formatValue(value any, typeOID uint32) any {
 	if value == nil {
 		return nil
 	}
 
+	// Handle UUID type (OID 2950)
+	if typeOID == 2950 {
+		return formatUUID(value)
+	}
+
 	// Handle []byte values based on type
 	if bytesVal, ok := value.([]byte); ok {
 		switch typeOID {
-		case 2950: // UUID
-			if len(bytesVal) == 16 {
-				// Format as UUID string: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-				return fmt.Sprintf("%x-%x-%x-%x-%x",
-					bytesVal[0:4],
-					bytesVal[4:6],
-					bytesVal[6:8],
-					bytesVal[8:10],
-					bytesVal[10:16])
-			}
 		case 17: // bytea
 			// Format as hex string
 			return "\\x" + hex.EncodeToString(bytesVal)
@@ -109,7 +103,56 @@ func formatValue(value any, typeOID uint32) any {
 	return value
 }
 
-// getTypeName returns a PostgreSQL type name for common OIDs
+func formatUUID(value any) string {
+	var uuidBytes [16]byte
+
+	switch v := value.(type) {
+	case [16]byte:
+		uuidBytes = v
+	case []byte:
+		if len(v) == 16 {
+			copy(uuidBytes[:], v)
+		} else if len(v) == 36 {
+			return string(v)
+		} else {
+			return fmt.Sprintf("%v", value)
+		}
+	case string:
+		return v
+	default:
+		if stringer, ok := value.(fmt.Stringer); ok {
+			return stringer.String()
+		}
+
+		return fmt.Sprintf("%v", value)
+	}
+
+	var buf [36]byte
+	encodeUUIDHex(buf[:], uuidBytes)
+	return string(buf[:])
+}
+
+func encodeUUIDHex(dst []byte, uuid [16]byte) {
+	const hexDigits = "0123456789abcdef"
+
+	for i, b := range uuid {
+		dst[i*2] = hexDigits[b>>4]
+		dst[i*2+1] = hexDigits[b&0x0f]
+	}
+
+	// Insert hyphens at positions: 8, 13, 18, 23
+	// Work backwards to avoid overwriting
+	copy(dst[24:36], dst[20:32]) // Last 12 chars (6 bytes)
+	dst[23] = '-'
+	copy(dst[19:23], dst[16:20]) // 4 chars (2 bytes)
+	dst[18] = '-'
+	copy(dst[14:18], dst[12:16]) // 4 chars (2 bytes)
+	dst[13] = '-'
+	copy(dst[9:13], dst[8:12]) // 4 chars (2 bytes)
+	dst[8] = '-'
+	// First 8 chars already in place
+}
+
 func getTypeName(oid uint32) string {
 	switch oid {
 	case 16:
